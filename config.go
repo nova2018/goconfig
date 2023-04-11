@@ -292,7 +292,6 @@ func watchViper(c *Config, cfg *configWatch, watch uint8, isStart bool) {
 	if cfg.viper == nil {
 		return
 	}
-	fmt.Printf("=====watch: %+v \n", watch)
 	switch watch {
 	case WatchFile:
 		_ = cfg.viper.ReadInConfig()
