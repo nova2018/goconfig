@@ -32,7 +32,8 @@ beard: true
 
 	fmt.Println("v.AllSettings:", v.AllSettings())
 
-	AddNoWatchViper(v)
+	AddNoWatchViper(v, "a")
+	AddNoWatchViper(v, "b")
 
 	StartWait()
 
@@ -44,7 +45,7 @@ beard: true
 
 	for {
 		time.Sleep(1 * time.Second)
-		//	fmt.Printf("%v 1app.AllSettings:%v\n", time.Now(), GetConfig().AllSettings())
+		fmt.Printf("%v 1app.AllSettings:%v\n", time.Now(), GetConfig().AllSettings())
 	}
 
 }
