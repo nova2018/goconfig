@@ -31,7 +31,8 @@ func init() {
 type configWatch struct {
 	viper  *viper.Viper
 	watch  uint8 // 监控类型
-	inited bool  // 是否初始化
+	prefix string
+	inited bool // 是否初始化
 }
 
 type keyWatch struct {
@@ -185,31 +186,34 @@ func (c *Config) GetConfig() *viper.Viper {
 	return c.config
 }
 
-func AddWatchViper(watch uint8, v ...*viper.Viper) { c.AddWatchViper(watch, v...) }
+func AddWatchViper(watch uint8, v *viper.Viper, prefix ...string) {
+	c.AddWatchViper(watch, v, prefix...)
+}
 
-func (c *Config) AddWatchViper(watch uint8, v ...*viper.Viper) {
-	if len(v) > 0 {
-		for _, vv := range v {
-			c.listWatch = append(c.listWatch, &configWatch{
-				viper: vv,
-				watch: watch,
-			})
-		}
+func (c *Config) AddWatchViper(watch uint8, v *viper.Viper, prefix ...string) {
+	if len(prefix) == 0 {
+		prefix = []string{""}
 	}
+
+	c.listWatch = append(c.listWatch, &configWatch{
+		viper:  v,
+		watch:  watch,
+		prefix: prefix[0],
+	})
 }
 
 // AddViper 添加子viper
-func AddViper(v ...*viper.Viper) { c.AddViper(v...) }
+func AddViper(v *viper.Viper, prefix ...string) { c.AddViper(v, prefix...) }
 
 // AddViper 添加子viper
-func (c *Config) AddViper(v ...*viper.Viper) {
-	c.AddWatchViper(WatchFile, v...)
+func (c *Config) AddViper(v *viper.Viper, prefix ...string) {
+	c.AddWatchViper(WatchFile, v, prefix...)
 }
 
-func AddNoWatchViper(v ...*viper.Viper) { c.AddNoWatchViper(v...) }
+func AddNoWatchViper(v *viper.Viper, prefix ...string) { c.AddNoWatchViper(v, prefix...) }
 
-func (c *Config) AddNoWatchViper(v ...*viper.Viper) {
-	c.AddWatchViper(WatchNone, v...)
+func (c *Config) AddNoWatchViper(v *viper.Viper, prefix ...string) {
+	c.AddWatchViper(WatchNone, v, prefix...)
 }
 
 // AddConfig 初始化并添加一个viper
@@ -249,10 +253,18 @@ func (c *Config) notifyKeyUpdate() {
 	}
 }
 
-func mergeConfig(viper, sourceViper *viper.Viper) {
+func mergeConfig(viper, sourceViper *viper.Viper, prefix ...string) {
+	if len(prefix) == 0 {
+		prefix = []string{""}
+	}
 	viper.SetConfigType("yml")
-	c := sourceViper.AllSettings()
-	bs, err := yaml.Marshal(c)
+	cfg := sourceViper.AllSettings()
+	if prefix[0] != "" {
+		cfg = map[string]interface{}{
+			prefix[0]: cfg,
+		}
+	}
+	bs, err := yaml.Marshal(cfg)
 	if err != nil {
 		log.Fatalf("unable to marshal config to YAML: %v", err)
 	}
@@ -265,7 +277,7 @@ func (c *Config) flush() {
 
 	for _, w := range c.listWatch {
 		if w.viper != nil {
-			mergeConfig(newViper, w.viper)
+			mergeConfig(newViper, w.viper, w.prefix)
 		}
 	}
 
