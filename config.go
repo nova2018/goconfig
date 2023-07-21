@@ -33,6 +33,7 @@ type configWatch struct {
 	watch  uint8 // 监控类型
 	prefix string
 	inited bool // 是否初始化
+	enable bool
 }
 
 type keyWatch struct {
@@ -178,7 +179,7 @@ func genHash(v *viper.Viper) string {
 	return string(hash[:])
 }
 
-func GetConfig() *viper.Viper { return c.GetConfig() }
+func GetConfig() *Config { return c }
 
 func (c *Config) GetConfig() *viper.Viper {
 	c.lock.RLock()
@@ -194,11 +195,14 @@ func (c *Config) AddWatchViper(watch uint8, v *viper.Viper, prefix ...string) {
 	if len(prefix) == 0 {
 		prefix = []string{""}
 	}
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 
 	c.listWatch = append(c.listWatch, &configWatch{
 		viper:  v,
 		watch:  watch,
 		prefix: prefix[0],
+		enable: true,
 	})
 }
 
@@ -214,6 +218,25 @@ func AddNoWatchViper(v *viper.Viper, prefix ...string) { c.AddNoWatchViper(v, pr
 
 func (c *Config) AddNoWatchViper(v *viper.Viper, prefix ...string) {
 	c.AddWatchViper(WatchNone, v, prefix...)
+}
+
+func DelViper(v *viper.Viper) {
+	c.DelViper(v)
+}
+
+func (c *Config) DelViper(v *viper.Viper) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	listWatch := make([]*configWatch, 0, len(c.listWatch)-1)
+	for _, watch := range c.listWatch {
+		if watch.viper != v {
+			listWatch = append(listWatch, watch)
+		} else {
+			watch.enable = false
+		}
+	}
+	c.listWatch = listWatch
 }
 
 // AddConfig 初始化并添加一个viper
@@ -320,12 +343,12 @@ func watchViper(c *Config, cfg *configWatch, watch uint8, isStart bool) {
 			if err != nil {
 				panic(err)
 			}
-			go func(v *viper.Viper) {
+			go func(v *configWatch) {
 				ticker := time.Tick(time.Second)
-				for c.isWatch {
+				for c.isWatch && v.enable {
 					select {
 					case _ = <-ticker:
-						e := v.WatchRemoteConfig()
+						e := v.viper.WatchRemoteConfig()
 						if e != nil {
 							fmt.Printf("%s viper remote listen failure! err=%v\n", time.Now().Format("2006-01-02 15:04:05"), e)
 							continue
@@ -334,7 +357,7 @@ func watchViper(c *Config, cfg *configWatch, watch uint8, isStart bool) {
 						c.flush()
 					}
 				}
-			}(cfg.viper)
+			}(cfg)
 		}
 	}
 }
