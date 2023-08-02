@@ -41,11 +41,11 @@ beard: true
 		fmt.Printf("======= update!\n")
 	})
 
-	fmt.Println("0app.AllSettings:", GetConfig().AllSettings())
+	fmt.Println("0app.AllSettings:", GetConfig().GetConfig().AllSettings())
 
 	for {
 		time.Sleep(1 * time.Second)
-		fmt.Printf("%v 1app.AllSettings:%v\n", time.Now(), GetConfig().AllSettings())
+		fmt.Printf("%v 1app.AllSettings:%v\n", time.Now(), GetConfig().GetConfig().AllSettings())
 	}
 
 }

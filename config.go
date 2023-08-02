@@ -322,6 +322,10 @@ func (c *Config) flush() {
 	}
 }
 
+func Equal(v1, v2 *viper.Viper) bool {
+	return genHash(v1) == genHash(v2)
+}
+
 // 监控viper
 func watchViper(c *Config, cfg *configWatch, watch uint8, isStart bool) {
 	if cfg.viper == nil {
