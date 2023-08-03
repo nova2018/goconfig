@@ -15,7 +15,9 @@ import (
 
 type Config struct {
 	config         *viper.Viper
-	lock           *sync.RWMutex
+	cLock          *sync.RWMutex // lock for config
+	wLock          *sync.RWMutex // lock for listWatch
+	kLock          *sync.RWMutex // lock for listWatchKey
 	isWatch        bool
 	listWatch      []*configWatch
 	onConfigUpdate func() // 变更通知
@@ -28,26 +30,29 @@ func init() {
 	c = New()
 }
 
-type watchCustom interface {
+type customWatcher interface {
 	GetViper() (*viper.Viper, error)
 	OnChange() <-chan struct{}
 }
 
 type configWatch struct {
-	viper    *viper.Viper
-	getViper watchCustom
-	watch    uint8 // 监控类型
-	prefix   string
-	inited   bool // 是否初始化
-	enable   bool
+	viper   *viper.Viper
+	watcher customWatcher
+	watch   uint8 // 监控类型
+	prefix  string
+	inited  bool // 是否初始化
+	enable  bool
 }
 
 func (w configWatch) GetViper() *viper.Viper {
-	if w.viper == nil {
+	if w.viper != nil {
 		return w.viper
 	}
-	v, _ := w.getViper.GetViper()
-	return v
+	if w.watcher != nil {
+		v, _ := w.watcher.GetViper()
+		return v
+	}
+	return nil
 }
 
 type keyWatch struct {
@@ -108,14 +113,16 @@ var (
 	watchHandler = map[uint8]func(*Config, *configWatch, uint8, bool){
 		WatchFile:   watchViper,
 		WatchRemote: watchViper,
-		WatchCustom: watchViper,
+		WatchCustom: watchCustom,
 	}
 )
 
 func New() *Config {
 	return &Config{
 		config:    viper.New(),
-		lock:      &sync.RWMutex{},
+		cLock:     &sync.RWMutex{},
+		wLock:     &sync.RWMutex{},
+		kLock:     &sync.RWMutex{},
 		listWatch: make([]*configWatch, 0, 1),
 		isWatch:   false,
 	}
@@ -149,6 +156,8 @@ func (c *Config) Stop() {
 
 // 启动监控
 func (c *Config) watch(isStart bool) {
+	c.wLock.RLock()
+	defer c.wLock.RUnlock()
 	c.isWatch = isStart
 	for _, v := range c.listWatch {
 		for w, h := range watchHandler {
@@ -164,8 +173,8 @@ func OnKeyChange(key string, fn func()) {
 }
 
 func (c *Config) OnKeyChange(key string, fn func()) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.kLock.Lock()
+	defer c.kLock.Unlock()
 	isHit := false
 	for _, watch := range c.listWatchKey {
 		if watch.key == key {
@@ -198,8 +207,8 @@ func genHash(v *viper.Viper) string {
 func GetConfig() *Config { return c }
 
 func (c *Config) GetConfig() *viper.Viper {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
+	c.cLock.RLock()
+	defer c.cLock.RUnlock()
 	return c.config
 }
 
@@ -211,20 +220,25 @@ func (c *Config) AddWatchViper(watch uint8, v *viper.Viper, prefix ...string) {
 	c.addWatchViper0(watch, v, nil, prefix...)
 }
 
-func (c *Config) addWatchViper0(watch uint8, v *viper.Viper, vv watchCustom, prefix ...string) {
+func (c *Config) addWatchViper0(watch uint8, v *viper.Viper, vv customWatcher, prefix ...string) {
 	if len(prefix) == 0 {
 		prefix = []string{""}
 	}
-	c.lock.RLock()
-	defer c.lock.RUnlock()
+	c.wLock.Lock()
+	cc := &configWatch{
+		viper:   v,
+		watcher: vv,
+		watch:   watch,
+		prefix:  prefix[0],
+		enable:  true,
+	}
+	c.listWatch = append(c.listWatch, cc)
+	c.wLock.Unlock()
 
-	c.listWatch = append(c.listWatch, &configWatch{
-		viper:    v,
-		getViper: vv,
-		watch:    watch,
-		prefix:   prefix[0],
-		enable:   true,
-	})
+	if c.isWatch && watch != WatchNone {
+		watchViper(c, cc, watch, c.isWatch)
+	}
+	c.flush()
 }
 
 // AddViper 添加子viper
@@ -241,9 +255,9 @@ func (c *Config) AddNoWatchViper(v *viper.Viper, prefix ...string) {
 	c.AddWatchViper(WatchNone, v, prefix...)
 }
 
-func AddCustomWatchViper(v watchCustom, prefix ...string) { c.AddCustomWatchViper(v, prefix...) }
+func AddCustomWatchViper(v customWatcher, prefix ...string) { c.AddCustomWatchViper(v, prefix...) }
 
-func (c *Config) AddCustomWatchViper(v watchCustom, prefix ...string) {
+func (c *Config) AddCustomWatchViper(v customWatcher, prefix ...string) {
 	c.addWatchViper0(WatchCustom, nil, v, prefix...)
 }
 
@@ -252,8 +266,8 @@ func DelViper(v any) {
 }
 
 func (c *Config) DelViper(v any) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.wLock.Lock()
+	defer c.wLock.Unlock()
 
 	listWatch := make([]*configWatch, 0, len(c.listWatch)-1)
 	for _, watch := range c.listWatch {
@@ -262,8 +276,8 @@ func (c *Config) DelViper(v any) {
 				watch.enable = false
 				continue
 			}
-		} else if vv, ok := v.(watchCustom); ok {
-			if watch.getViper != nil && watch.getViper == vv {
+		} else if vv, ok := v.(customWatcher); ok {
+			if watch.watcher != nil && watch.watcher == vv {
 				watch.enable = false
 				continue
 			}
@@ -291,8 +305,8 @@ func (c *Config) AddConfig(configType, configName string, configPath ...string) 
 
 // 重置全局viper
 func (c *Config) setConfig(v *viper.Viper) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.cLock.Lock()
+	defer c.cLock.Unlock()
 	c.config = v
 }
 
@@ -303,8 +317,8 @@ func (c *Config) onViperChange(e fsnotify.Event) {
 }
 
 func (c *Config) notifyKeyUpdate() {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
+	c.kLock.RLock()
+	defer c.kLock.RUnlock()
 	for _, watch := range c.listWatchKey {
 		watch.checkAndNotify()
 	}
@@ -332,12 +346,14 @@ func mergeConfig(viper, sourceViper *viper.Viper, prefix ...string) {
 func (c *Config) flush() {
 	newViper := viper.New()
 
+	c.wLock.RLock()
 	for _, w := range c.listWatch {
 		vv := w.GetViper()
 		if vv != nil {
 			mergeConfig(newViper, vv, w.prefix)
 		}
 	}
+	c.wLock.RUnlock()
 
 	hash := genHash(c.config)
 	newHash := genHash(newViper)
@@ -358,6 +374,9 @@ func (c *Config) flush() {
 }
 
 func Equal(v1, v2 *viper.Viper) bool {
+	if v1 == nil || v2 == nil {
+		return v1 == v2
+	}
 	return genHash(v1) == genHash(v2)
 }
 
@@ -377,6 +396,9 @@ func watchViper(c *Config, cfg *configWatch, watch uint8, isStart bool) {
 			cfg.viper.OnConfigChange(nil)
 		}
 	case WatchRemote:
+		if cfg.viper == nil {
+			return
+		}
 		if isStart {
 			err := cfg.viper.ReadRemoteConfig()
 			if err != nil {
@@ -398,28 +420,33 @@ func watchViper(c *Config, cfg *configWatch, watch uint8, isStart bool) {
 				}
 			}(cfg)
 		}
-	case WatchCustom:
-		if isStart {
-			lastViper := cfg.GetViper()
-			go func(v *configWatch) {
-				ticker := time.Tick(time.Second)
-				change := cfg.getViper.OnChange()
-				for c.isWatch && v.enable {
-					select {
-					case <-change:
-						lastViper = cfg.GetViper()
+	}
+}
+
+func watchCustom(c *Config, cfg *configWatch, watch uint8, isStart bool) {
+	if cfg.watcher == nil || watch != WatchCustom {
+		return
+	}
+	if isStart {
+		var lastViper *viper.Viper
+		go func(v *configWatch) {
+			ticker := time.Tick(time.Second)
+			change := cfg.watcher.OnChange()
+			for c.isWatch && v.enable {
+				select {
+				case <-change:
+					lastViper = cfg.GetViper()
+					c.flush()
+				case <-ticker:
+					curViper := cfg.GetViper()
+					if !Equal(lastViper, curViper) {
+						// 发生变更，则刷新
+						lastViper = curViper
 						c.flush()
-					case <-ticker:
-						curViper := cfg.GetViper()
-						if !Equal(lastViper, curViper) {
-							// 发生变更，则刷新
-							lastViper = curViper
-							c.flush()
-						}
 					}
 				}
-			}(cfg)
-		}
+			}
+		}(cfg)
 	}
 }
 
