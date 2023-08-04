@@ -53,10 +53,18 @@ func (c *Config) OnKeyChange(key string, fn func()) {
 	}
 }
 
+func GetConfig() *viper.Viper {
+	return _c.GetConfig()
+}
+
 func (c *Config) GetConfig() *viper.Viper {
 	c.cLock.RLock()
 	defer c.cLock.RUnlock()
 	return c.config
+}
+
+func SetConfig(v *viper.Viper) {
+	_c.SetConfig(v)
 }
 
 // SetConfig 重置全局viper
