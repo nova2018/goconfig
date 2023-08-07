@@ -15,7 +15,7 @@ type matchKeyWatch struct {
 }
 
 func (w *matchKeyWatch) init() {
-	w.reload()
+	w.reload(allKeys(w.config.GetConfig()))
 }
 
 func (w *matchKeyWatch) keys() []string {
@@ -48,9 +48,7 @@ func (w *matchKeyWatch) keys() []string {
 	return newListKey
 }
 
-func (w *matchKeyWatch) reload() {
-	listKey := w.keys()
-
+func (w *matchKeyWatch) reload(listKey []string) {
 	mapWatchItem := make(map[string]*watchItem, len(listKey))
 	if len(listKey) > 0 {
 		for _, k := range listKey {
@@ -66,21 +64,27 @@ func (w *matchKeyWatch) reload() {
 	freeWatchItemMap(oldMapWatchItem)
 }
 
-func (w *matchKeyWatch) checkAndNotify() {
+func (w *matchKeyWatch) checkAndNotify(keys []string) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	listFn := w.checkKeyAndNotify()
+	listKey := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if w.key.MatchString(k) {
+			listKey = append(listKey, k)
+		}
+	}
+
+	listFn := w.checkKeyAndNotify(listKey)
 	if len(listFn) > 0 {
-		w.reload()
+		w.reload(listKey)
 	}
 	for _, fn := range listFn {
 		fn()
 	}
 }
 
-func (w *matchKeyWatch) checkKeyAndNotify() []func() {
-	keys := w.keys()
+func (w *matchKeyWatch) checkKeyAndNotify(keys []string) []func() {
 	hitKey := make(map[string]bool, len(keys))
 	notify := func(key string, subKey string, op int8) {
 		event := ConfigUpdateEvent{

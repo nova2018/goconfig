@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"log"
 	"reflect"
+	"strings"
 )
 
 func genHash(v *viper.Viper) string {
@@ -48,4 +49,31 @@ func keySlice(viper *viper.Viper, key string, value ...reflect.Value) []string {
 		return []string{key}
 	}
 	return listKey
+}
+
+func allKeys(cfg *viper.Viper) []string {
+	listKey := make([]string, 0)
+	if cfg != nil {
+		keys := cfg.AllKeys()
+		for _, k := range keys {
+			kk := keySlice(cfg, k)
+			listKey = append(listKey, kk...)
+		}
+	}
+	// 展开+去重
+	mapUnique := make(map[string]bool)
+	newListKey := make([]string, 0)
+	for _, k := range listKey {
+		p := strings.Split(k, ".")
+		l := len(p)
+		for i := 0; i < l; i++ {
+			sub := p[0 : i+1]
+			newKey := strings.Join(sub, ".")
+			if !mapUnique[newKey] {
+				mapUnique[newKey] = true
+				newListKey = append(newListKey, newKey)
+			}
+		}
+	}
+	return newListKey
 }

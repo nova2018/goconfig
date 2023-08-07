@@ -13,6 +13,7 @@ type Config struct {
 	listWatchKey      []*keyWatch
 	listWatchMapKey   []*mapKeyWatch
 	listWatchMatchKey []*matchKeyWatch
+	lastHash          string
 }
 
 var _c *Config
@@ -133,10 +134,15 @@ func (c *Config) SetConfig(v *viper.Viper) {
 	c.config = v
 	c.cLock.Unlock()
 
-	if len(c.listWatchKey) > 0 ||
-		len(c.listWatchMapKey) > 0 ||
-		len(c.listWatchMatchKey) > 0 {
-		c.notifyKeyUpdate()
+	newHash := genHash(v)
+	if newHash != c.lastHash {
+		c.lastHash = newHash
+
+		if len(c.listWatchKey) > 0 ||
+			len(c.listWatchMapKey) > 0 ||
+			len(c.listWatchMatchKey) > 0 {
+			c.notifyKeyUpdate()
+		}
 	}
 }
 
@@ -150,6 +156,6 @@ func (c *Config) notifyKeyUpdate() {
 		watch.checkAndNotify()
 	}
 	for _, watch := range c.listWatchMatchKey {
-		watch.checkAndNotify()
+		watch.checkAndNotify(allKeys(GetConfig()))
 	}
 }
