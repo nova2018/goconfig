@@ -1,17 +1,17 @@
 package goconfig
 
 type ConfigUpdateEvent struct {
-	key    string
-	subKey string
-	op     int8
+	fullKey string
+	key     string
+	op      int8
+}
+
+func (c ConfigUpdateEvent) FullKey() string {
+	return c.fullKey
 }
 
 func (c ConfigUpdateEvent) Key() string {
 	return c.key
-}
-
-func (c ConfigUpdateEvent) SubKey() string {
-	return c.subKey
 }
 
 func (c ConfigUpdateEvent) Op() int8 {

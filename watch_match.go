@@ -82,9 +82,9 @@ func (w *matchKeyWatch) checkKeyAndNotify() []func() {
 	hitKey := make(map[string]bool, len(keys))
 	notify := func(key string, subKey string, op int8) {
 		event := ConfigUpdateEvent{
-			key:    key,
-			subKey: subKey,
-			op:     op,
+			fullKey: key,
+			key:     subKey,
+			op:      op,
 		}
 		for _, fn := range w.notify {
 			go fn(event)
