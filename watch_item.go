@@ -14,6 +14,14 @@ type watchItem struct {
 	config    *Config
 }
 
+func (w *watchItem) reset() {
+	w.key = ""
+	w.lastViper = nil
+	w.lastHash = ""
+	w.lastVal = nil
+	w.config = nil
+}
+
 func (w *watchItem) reload() {
 	w.lastViper = w.config.GetConfig().Sub(w.key)
 	w.lastVal = w.config.GetConfig().Get(w.key)
@@ -44,13 +52,9 @@ var (
 )
 
 func acquireWatchItem() *watchItem {
-	x := watchItemPool.Get().(*watchItem)
-	x.key = ""
-	x.lastViper = nil
-	x.lastHash = ""
-	x.lastVal = nil
-	x.config = nil
-	return x
+	item := watchItemPool.Get().(*watchItem)
+	item.reset()
+	return item
 }
 
 func freeWatchItem(item *watchItem) {
