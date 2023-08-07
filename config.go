@@ -53,10 +53,11 @@ func (c *Config) OnKeyChange(key string, fn func()) {
 	}
 	if !isHit {
 		watch := &keyWatch{
-			key:    key,
-			notify: []func(){fn},
-			config: c,
-			lock:   &sync.Mutex{},
+			watchItem: acquireWatchItem(),
+			key:       key,
+			notify:    []func(){fn},
+			config:    c,
+			lock:      &sync.Mutex{},
 		}
 		watch.init()
 		c.listWatchKey = append(c.listWatchKey, watch)
@@ -76,11 +77,12 @@ func (c *Config) OnMapKeyChange(key string, fn func(e ConfigUpdateEvent)) {
 	if !isHit {
 		mapWatch := &mapKeyWatch{
 			keyWatch: &keyWatch{
-				key:    key,
-				config: c,
-				lock:   &sync.Mutex{},
+				watchItem: acquireWatchItem(),
+				key:       key,
+				config:    c,
+				lock:      &sync.Mutex{},
 			},
-			mapWatchItem: make(map[string]watchItem, 1),
+			mapWatchItem: make(map[string]*watchItem, 1),
 			notify:       []func(e ConfigUpdateEvent){fn},
 		}
 		mapWatch.init()
@@ -103,7 +105,7 @@ func (c *Config) OnMatchKeyChange(key *regexp.Regexp, fn func(e ConfigUpdateEven
 			key:          key,
 			config:       c,
 			lock:         &sync.Mutex{},
-			mapWatchItem: make(map[string]watchItem, 1),
+			mapWatchItem: make(map[string]*watchItem, 1),
 			notify:       []func(e ConfigUpdateEvent){fn},
 		}
 		matchWatch.init()

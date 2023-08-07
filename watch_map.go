@@ -7,7 +7,7 @@ import (
 
 type mapKeyWatch struct {
 	*keyWatch
-	mapWatchItem map[string]watchItem
+	mapWatchItem map[string]*watchItem
 	notify       []func(e ConfigUpdateEvent)
 }
 
@@ -19,17 +19,19 @@ func (w *mapKeyWatch) reload() {
 	w.keyWatch.reload()
 	listKey := w.keys(w.lastVal)
 
-	w.mapWatchItem = make(map[string]watchItem, len(listKey))
+	mapWatchItem := make(map[string]*watchItem, len(listKey))
 	if len(listKey) > 0 {
 		for _, k := range listKey {
-			item := watchItem{
-				key:    fmt.Sprintf("%s.%s", w.key, k),
-				config: w.config,
-			}
+			item := acquireWatchItem()
+			item.key = fmt.Sprintf("%s.%s", w.key, k)
+			item.config = w.config
 			item.reload()
-			w.mapWatchItem[k] = item
+			mapWatchItem[k] = item
 		}
 	}
+	oldMapWatchItem := w.mapWatchItem
+	w.mapWatchItem = mapWatchItem
+	freeWatchItemMap(oldMapWatchItem)
 }
 
 func (w *mapKeyWatch) keys(v interface{}) []string {
