@@ -1,7 +1,9 @@
 package goconfig
 
 import (
+	"crypto/md5"
 	"regexp"
+	"strings"
 	"sync"
 )
 
@@ -11,9 +13,13 @@ type matchKeyWatch struct {
 	config       *Config
 	mapWatchItem map[string]*watchItem
 	notify       []func(e ConfigUpdateEvent)
+	lastKeysHash string
+	lastKeys     []string
 }
 
 func (w *matchKeyWatch) init() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	w.reload(w.keys())
 }
 
@@ -33,8 +39,19 @@ func (w *matchKeyWatch) reload(listKey []string) {
 	freeWatchItemMap(oldMapWatchItem)
 }
 
+func (w *matchKeyWatch) genKeysHash(keys []string) string {
+	target := strings.Join(keys, "@")
+	s := md5.Sum([]byte(target))
+	return string(s[:])
+}
+
 func (w *matchKeyWatch) keys() []string {
 	keys := w.config.keys()
+	hashNew := w.genKeysHash(keys)
+	if w.lastKeysHash == hashNew {
+		return w.lastKeys
+	}
+	w.lastKeysHash = hashNew
 
 	listKey := make([]string, 0, len(keys))
 	for _, k := range keys {
@@ -42,6 +59,7 @@ func (w *matchKeyWatch) keys() []string {
 			listKey = append(listKey, k)
 		}
 	}
+	w.lastKeys = listKey
 	return listKey
 }
 
