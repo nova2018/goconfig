@@ -14,6 +14,8 @@ type Config struct {
 	listWatchMapKey   []*mapKeyWatch
 	listWatchMatchKey []*matchKeyWatch
 	lastHash          string
+	lastKeys          []string
+	keysLock          *sync.RWMutex
 }
 
 var _c *Config
@@ -24,9 +26,10 @@ func init() {
 
 func New() *Config {
 	return &Config{
-		config: viper.New(),
-		cLock:  &sync.RWMutex{},
-		kLock:  &sync.RWMutex{},
+		config:   viper.New(),
+		cLock:    &sync.RWMutex{},
+		kLock:    &sync.RWMutex{},
+		keysLock: &sync.RWMutex{},
 	}
 }
 
@@ -138,6 +141,10 @@ func (c *Config) SetConfig(v *viper.Viper) {
 	if newHash != c.lastHash {
 		c.lastHash = newHash
 
+		c.keysLock.Lock()
+		c.lastKeys = nil
+		c.keysLock.Unlock()
+
 		if len(c.listWatchKey) > 0 ||
 			len(c.listWatchMapKey) > 0 ||
 			len(c.listWatchMatchKey) > 0 {
@@ -156,6 +163,22 @@ func (c *Config) notifyKeyUpdate() {
 		watch.checkAndNotify()
 	}
 	for _, watch := range c.listWatchMatchKey {
-		watch.checkAndNotify(allKeys(GetConfig()))
+		watch.checkAndNotify()
 	}
+}
+
+func (c *Config) keys() []string {
+	c.keysLock.RLock()
+	if c.lastKeys != nil {
+		defer c.keysLock.RUnlock()
+		return c.lastKeys
+	}
+	c.keysLock.RUnlock()
+
+	c.keysLock.Lock()
+	defer c.keysLock.Unlock()
+	if c.lastKeys == nil {
+		c.lastKeys = allKeys(c.GetConfig())
+	}
+	return c.lastKeys
 }

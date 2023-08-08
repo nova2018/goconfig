@@ -2,7 +2,6 @@ package goconfig
 
 import (
 	"regexp"
-	"strings"
 	"sync"
 )
 
@@ -15,37 +14,7 @@ type matchKeyWatch struct {
 }
 
 func (w *matchKeyWatch) init() {
-	w.reload(allKeys(w.config.GetConfig()))
-}
-
-func (w *matchKeyWatch) keys() []string {
-	listKey := make([]string, 0)
-	cfg := w.config.GetConfig()
-	if cfg != nil {
-		keys := cfg.AllKeys()
-		for _, k := range keys {
-			kk := keySlice(cfg, k)
-			listKey = append(listKey, kk...)
-		}
-	}
-	// 展开+去重
-	mapUnique := make(map[string]bool)
-	newListKey := make([]string, 0)
-	for _, k := range listKey {
-		p := strings.Split(k, ".")
-		l := len(p)
-		for i := 0; i < l; i++ {
-			sub := p[0 : i+1]
-			newKey := strings.Join(sub, ".")
-			if !mapUnique[newKey] {
-				mapUnique[newKey] = true
-				if w.key.MatchString(newKey) {
-					newListKey = append(newListKey, newKey)
-				}
-			}
-		}
-	}
-	return newListKey
+	w.reload(w.keys())
 }
 
 func (w *matchKeyWatch) reload(listKey []string) {
@@ -64,9 +33,8 @@ func (w *matchKeyWatch) reload(listKey []string) {
 	freeWatchItemMap(oldMapWatchItem)
 }
 
-func (w *matchKeyWatch) checkAndNotify(keys []string) {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+func (w *matchKeyWatch) keys() []string {
+	keys := w.config.keys()
 
 	listKey := make([]string, 0, len(keys))
 	for _, k := range keys {
@@ -74,6 +42,13 @@ func (w *matchKeyWatch) checkAndNotify(keys []string) {
 			listKey = append(listKey, k)
 		}
 	}
+	return listKey
+}
+
+func (w *matchKeyWatch) checkAndNotify() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	listKey := w.keys()
 
 	listFn := w.checkKeyAndNotify(listKey)
 	if len(listFn) > 0 {
