@@ -30,24 +30,24 @@ c=6
 	cfg := New()
 	cfg.SetConfig(v)
 
-	cfg.OnKeyChange("a.x", func() {
+	cfg.OnKeyUpdate("a.x", func() {
 		fmt.Println("a.x update")
 	})
 
-	cfg.OnMapKeyChange("a.x", func(e ConfigUpdateEvent) {
+	cfg.OnMapKeyUpdate("a.x", func(e ConfigUpdateEvent) {
 		fmt.Println("a.x map key update", e)
 	})
 
-	cfg.OnMapKeyChange("b", func(e ConfigUpdateEvent) {
+	cfg.OnMapKeyUpdate("b", func(e ConfigUpdateEvent) {
 		fmt.Println("b map key update", e)
 	})
 
 	pattern, _ := regexp.Compile(`^c\.1$`)
-	cfg.OnMatchKeyChange(pattern, func(e ConfigUpdateEvent) {
+	cfg.OnMatchKeyUpdate(pattern, func(e ConfigUpdateEvent) {
 		fmt.Println("c.1 match key update", e)
 	})
 	pattern2, _ := regexp.Compile(`^c`)
-	cfg.OnMatchKeyChange(pattern2, func(e ConfigUpdateEvent) {
+	cfg.OnMatchKeyUpdate(pattern2, func(e ConfigUpdateEvent) {
 		fmt.Println("c match key update", e)
 	})
 

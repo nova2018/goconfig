@@ -16,6 +16,7 @@ type Config struct {
 	lastHash          string
 	lastKeys          []string
 	keysLock          *sync.RWMutex
+	listOnUpdate      []func()
 }
 
 var _c *Config
@@ -33,19 +34,29 @@ func New() *Config {
 	}
 }
 
-func OnKeyChange(key string, fn func()) {
-	_c.OnKeyChange(key, fn)
+func OnUpdate(fn func()) {
+	_c.OnUpdate(fn)
 }
 
-func OnMapKeyChange(key string, fn func(e ConfigUpdateEvent)) {
-	_c.OnMapKeyChange(key, fn)
+func OnKeyUpdate(key string, fn func()) {
+	_c.OnKeyUpdate(key, fn)
 }
 
-func OnMatchKeyChange(key string, fn func(e ConfigUpdateEvent)) {
-	_c.OnMapKeyChange(key, fn)
+func OnMapKeyUpdate(key string, fn func(e ConfigUpdateEvent)) {
+	_c.OnMapKeyUpdate(key, fn)
 }
 
-func (c *Config) OnKeyChange(key string, fn func()) {
+func OnMatchKeyUpdate(key *regexp.Regexp, fn func(e ConfigUpdateEvent)) {
+	_c.OnMatchKeyUpdate(key, fn)
+}
+
+func (c *Config) OnUpdate(fn func()) {
+	c.kLock.Lock()
+	defer c.kLock.Unlock()
+	c.listOnUpdate = append(c.listOnUpdate, fn)
+}
+
+func (c *Config) OnKeyUpdate(key string, fn func()) {
 	c.kLock.Lock()
 	defer c.kLock.Unlock()
 	isHit := false
@@ -68,7 +79,7 @@ func (c *Config) OnKeyChange(key string, fn func()) {
 	}
 }
 
-func (c *Config) OnMapKeyChange(key string, fn func(e ConfigUpdateEvent)) {
+func (c *Config) OnMapKeyUpdate(key string, fn func(e ConfigUpdateEvent)) {
 	c.kLock.Lock()
 	defer c.kLock.Unlock()
 	isHit := false
@@ -94,7 +105,7 @@ func (c *Config) OnMapKeyChange(key string, fn func(e ConfigUpdateEvent)) {
 	}
 }
 
-func (c *Config) OnMatchKeyChange(key *regexp.Regexp, fn func(e ConfigUpdateEvent)) {
+func (c *Config) OnMatchKeyUpdate(key *regexp.Regexp, fn func(e ConfigUpdateEvent)) {
 	c.kLock.Lock()
 	defer c.kLock.Unlock()
 	isHit := false
@@ -145,11 +156,21 @@ func (c *Config) SetConfig(v *viper.Viper) {
 		c.lastKeys = nil
 		c.keysLock.Unlock()
 
+		c.kLock.RLock()
+		if len(c.listOnUpdate) > 0 {
+			for _, fn := range c.listOnUpdate {
+				go fn()
+			}
+		}
+		c.kLock.RUnlock()
+
+		c.kLock.RLock()
 		if len(c.listWatchKey) > 0 ||
 			len(c.listWatchMapKey) > 0 ||
 			len(c.listWatchMatchKey) > 0 {
 			c.notifyKeyUpdate()
 		}
+		c.kLock.RUnlock()
 	}
 }
 
